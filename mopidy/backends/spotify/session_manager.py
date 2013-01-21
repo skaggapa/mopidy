@@ -42,13 +42,25 @@ class SpotifySessionManager(process.BaseThread, PyspotifySessionManager):
         self.backend_ref = backend_ref
 
         self.connected = threading.Event()
-        self.push_audio_data = True
         self.buffer_timestamp = 0
 
         self.container_manager = None
         self.playlist_manager = None
 
         self._initial_data_receive_completed = False
+
+        self.streaming = False
+
+    def set_streaming(self, bool, end_of_track_cb, music_delivery_cb):
+        logger.debug('set_streaming called')
+        if bool:
+            self._stream_eot = end_of_track_cb
+            self._stream_md = music_delivery_cb
+        else:
+            self._stream_eot = None
+            self._stream_md = None
+        self._streaming = bool
+
 
     def run_inside_try(self):
         self.backend = self.backend_ref.proxy()
@@ -105,10 +117,12 @@ class SpotifySessionManager(process.BaseThread, PyspotifySessionManager):
         """Callback used by pyspotify"""
         # pylint: disable = R0913
         # Too many arguments (8/5)
-
-        if not self.push_audio_data:
-            return 0
-
+        if self._streaming:
+            logger.debug(frame_size)
+            logger.debug(num_frames)
+            logger.debug(sample_type)
+            return self._stream_md(frames, num_frames)
+        
         assert sample_type == 0, 'Expects 16-bit signed integer samples'
         capabilites = """
             audio/x-raw-int,
@@ -160,6 +174,9 @@ class SpotifySessionManager(process.BaseThread, PyspotifySessionManager):
     def end_of_track(self, session):
         """Callback used by pyspotify"""
         logger.debug('End of data stream reached')
+        if self._streaming:
+            self._stream_eot()
+            return
         self.audio.emit_end_of_stream()
 
     def refresh_playlists(self):

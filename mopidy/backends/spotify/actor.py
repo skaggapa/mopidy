@@ -21,6 +21,7 @@ class SpotifyBackend(pykka.ThreadingActor, base.Backend):
         from .playback import SpotifyPlaybackProvider
         from .session_manager import SpotifySessionManager
         from .playlists import SpotifyPlaylistsProvider
+        from .stream import SpotifyStream
 
         self.library = SpotifyLibraryProvider(backend=self)
         self.playback = SpotifyPlaybackProvider(audio=audio, backend=self)
@@ -40,10 +41,14 @@ class SpotifyBackend(pykka.ThreadingActor, base.Backend):
             proxy=proxy, proxy_username=proxy_username,
             proxy_password=proxy_password)
 
+        self.stream = SpotifyStream(self.spotify)
+
     def on_start(self):
         logger.info('Mopidy uses SPOTIFY(R) CORE')
         logger.debug('Connecting to Spotify')
         self.spotify.start()
+        self.stream.start()
 
     def on_stop(self):
+        self.stream.stop()
         self.spotify.logout()
